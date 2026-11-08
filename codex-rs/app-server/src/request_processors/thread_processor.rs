@@ -1427,16 +1427,7 @@ impl ThreadRequestProcessor {
                 .unwrap_or_else(|| config.cwd.clone());
             let current_cli_overrides = config_manager.current_cli_overrides();
             let cli_overrides_with_trust;
-            let cli_overrides_for_reload = if let Err(err) =
-                codex_core::config::set_project_trust_level(
-                    &listener_task_context.codex_home,
-                    trust_target.as_path(),
-                    TrustLevel::Trusted,
-                ) {
-                warn!(
-                    "failed to persist trusted project state for {}; continuing with in-memory trust for this thread: {err}",
-                    trust_target.display()
-                );
+            let cli_overrides_for_reload = {
                 let mut project = toml::map::Map::new();
                 project.insert(
                     "trust_level".to_string(),
@@ -1456,8 +1447,6 @@ impl ThreadRequestProcessor {
                     )))
                     .collect::<Vec<_>>();
                 cli_overrides_with_trust.as_slice()
-            } else {
-                current_cli_overrides.as_slice()
             };
 
             config = config_manager
