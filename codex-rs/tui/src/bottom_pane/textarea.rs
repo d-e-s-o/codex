@@ -1098,6 +1098,27 @@ impl TextArea {
         if self.vim_operator_keymap.motion_word_end.is_pressed(event) {
             return Some(VimMotion::WordEnd);
         }
+        if self
+            .vim_operator_keymap
+            .motion_big_word_forward
+            .is_pressed(event)
+        {
+            return Some(VimMotion::BigWordForward);
+        }
+        if self
+            .vim_operator_keymap
+            .motion_big_word_backward
+            .is_pressed(event)
+        {
+            return Some(VimMotion::BigWordBackward);
+        }
+        if self
+            .vim_operator_keymap
+            .motion_big_word_end
+            .is_pressed(event)
+        {
+            return Some(VimMotion::BigWordEnd);
+        }
         if self.vim_operator_keymap.motion_line_start.is_pressed(event) {
             return Some(VimMotion::LineStart);
         }
@@ -1108,16 +1129,25 @@ impl TextArea {
     }
 
     fn apply_vim_operator(&mut self, op: VimOperator, motion: VimMotion) {
-        if op == VimOperator::Change && motion == VimMotion::WordForward {
-            let target = if self.text[self.cursor_pos..]
+        if op == VimOperator::Change
+            && matches!(motion, VimMotion::WordForward | VimMotion::BigWordForward)
+        {
+            let big_word = matches!(motion, VimMotion::BigWordForward);
+            let on_word = self.text[self.cursor_pos..]
                 .chars()
                 .next()
-                .is_some_and(|ch| !ch.is_whitespace())
-            {
-                self.end_of_next_word()
-            } else {
-                self.beginning_of_next_word()
-                    .min(self.end_of_current_line())
+                .is_some_and(|ch| !ch.is_whitespace());
+            // `cw` and `cW` change the word under the cursor rather than the
+            // gap that follows it, so they stop before trailing whitespace.
+            let target = match (on_word, big_word) {
+                (true, true) => self.end_of_big_word_from(self.cursor_pos),
+                (true, false) => self.end_of_next_word(),
+                (false, true) => self
+                    .beginning_of_next_big_word()
+                    .min(self.end_of_current_line()),
+                (false, false) => self
+                    .beginning_of_next_word()
+                    .min(self.end_of_current_line()),
             };
             if target > self.cursor_pos {
                 self.apply_vim_operator_to_range(op, self.cursor_pos..target);
@@ -1209,6 +1239,9 @@ impl TextArea {
             | VimMotion::WordForward
             | VimMotion::WordBackward
             | VimMotion::WordEnd
+            | VimMotion::BigWordForward
+            | VimMotion::BigWordBackward
+            | VimMotion::BigWordEnd
             | VimMotion::LineStart
             | VimMotion::LineEnd => return None,
         };
@@ -1226,6 +1259,11 @@ impl TextArea {
             VimMotion::WordForward => self.set_cursor(self.beginning_of_next_word()),
             VimMotion::WordBackward => self.set_cursor(self.beginning_of_previous_word()),
             VimMotion::WordEnd => self.set_cursor(self.vim_word_end_exclusive()),
+            VimMotion::BigWordForward => self.set_cursor(self.beginning_of_next_big_word()),
+            VimMotion::BigWordBackward => {
+                self.set_cursor(self.beginning_of_previous_big_word());
+            }
+            VimMotion::BigWordEnd => self.set_cursor(self.vim_big_word_end_exclusive()),
             VimMotion::LineStart => self.set_cursor(self.beginning_of_current_line()),
             VimMotion::LineEnd => self.set_cursor(self.end_of_current_line()),
         }
@@ -3289,6 +3327,87 @@ mod tests {
 
         assert_eq!(t.cursor(), "alph".len()); // codespell:ignore alph
         assert_eq!(t.text(), "alpha beta");
+    }
+
+    #[test]
+    fn vim_delete_big_word_takes_the_separator_with_it() {
+        let mut t = ta_with("foo.bar/baz qux");
+        t.set_cursor(/*pos*/ 0);
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        t.input(KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE));
+
+        assert_eq!(t.text(), "qux");
+        assert_eq!(t.kill_buffer, "foo.bar/baz ");
+    }
+
+    #[test]
+    fn vim_delete_to_big_word_end_stops_on_the_last_character() {
+        let mut t = ta_with("foo.bar/baz qux");
+        t.set_cursor(/*pos*/ 0);
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        t.input(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::NONE));
+
+        assert_eq!(t.text(), " qux");
+        assert_eq!(t.kill_buffer, "foo.bar/baz");
+    }
+
+    #[test]
+    fn vim_delete_backward_big_word() {
+        let mut t = ta_with("foo.bar/baz qux");
+        t.set_cursor("foo.bar/baz ".len());
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        t.input(KeyEvent::new(KeyCode::Char('B'), KeyModifiers::NONE));
+
+        assert_eq!(t.text(), "qux");
+        assert_eq!(t.kill_buffer, "foo.bar/baz ");
+    }
+
+    #[test]
+    fn vim_change_big_word_stops_before_the_separator() {
+        let mut t = ta_with("foo.bar/baz qux");
+        t.set_cursor(/*pos*/ 0);
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE));
+        t.input(KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE));
+
+        assert_eq!(t.text(), " qux");
+        assert_eq!(t.kill_buffer, "foo.bar/baz");
+        assert_eq!(t.cursor(), /*pos*/ 0);
+        assert_eq!(t.vim_mode_label(), Some("Insert"));
+    }
+
+    #[test]
+    fn vim_yank_big_word_leaves_text_intact() {
+        let mut t = ta_with("foo.bar/baz qux");
+        t.set_cursor(/*pos*/ 0);
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        t.input(KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE));
+
+        assert_eq!(t.text(), "foo.bar/baz qux");
+        assert_eq!(t.kill_buffer, "foo.bar/baz ");
+    }
+
+    #[test]
+    fn vim_big_word_operator_motions_repeat_with_dot() {
+        let mut t = ta_with("foo.bar/baz qux/quux");
+        t.set_cursor(/*pos*/ 0);
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        t.input(KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE));
+        t.input(KeyEvent::new(KeyCode::Char('.'), KeyModifiers::NONE));
+
+        assert_eq!(t.text(), "");
+        assert_eq!(t.kill_buffer, "qux/quux");
     }
 
     #[test]

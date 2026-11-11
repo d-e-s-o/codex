@@ -5466,6 +5466,9 @@
             "vim_operator": {
               "cancel": null,
               "delete_line": null,
+              "motion_big_word_backward": null,
+              "motion_big_word_end": null,
+              "motion_big_word_forward": null,
               "motion_down": null,
               "motion_find_backward": null,
               "motion_find_forward": null,
@@ -6691,6 +6694,9 @@
           "default": {
             "cancel": null,
             "delete_line": null,
+            "motion_big_word_backward": null,
+            "motion_big_word_end": null,
+            "motion_big_word_forward": null,
             "motion_down": null,
             "motion_find_backward": null,
             "motion_find_forward": null,
@@ -7310,6 +7316,30 @@
             }
           ],
           "description": "Repeat delete operator to delete the whole line (`dd`)."
+        },
+        "motion_big_word_backward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: to start of previous WORD (`B`)."
+        },
+        "motion_big_word_end": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: to end of current/next WORD (`E`)."
+        },
+        "motion_big_word_forward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Motion: to start of next WORD (`W`)."
         },
         "motion_down": {
           "allOf": [

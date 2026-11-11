@@ -400,6 +400,12 @@ pub struct TuiVimOperatorKeymap {
     pub motion_word_backward: Option<KeybindingsSpec>,
     /// Motion: to end of current/next word (`e`).
     pub motion_word_end: Option<KeybindingsSpec>,
+    /// Motion: to start of next WORD (`W`).
+    pub motion_big_word_forward: Option<KeybindingsSpec>,
+    /// Motion: to start of previous WORD (`B`).
+    pub motion_big_word_backward: Option<KeybindingsSpec>,
+    /// Motion: to end of current/next WORD (`E`).
+    pub motion_big_word_end: Option<KeybindingsSpec>,
     /// Motion: to start of line (`0`).
     pub motion_line_start: Option<KeybindingsSpec>,
     /// Motion: to end of line (`$`).
