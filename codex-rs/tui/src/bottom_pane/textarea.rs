@@ -910,6 +910,26 @@ impl TextArea {
             self.set_cursor(self.vim_word_end_cursor());
             return;
         }
+        if self
+            .vim_normal_keymap
+            .move_big_word_forward
+            .is_pressed(event)
+        {
+            self.set_cursor(self.beginning_of_next_big_word());
+            return;
+        }
+        if self
+            .vim_normal_keymap
+            .move_big_word_backward
+            .is_pressed(event)
+        {
+            self.set_cursor(self.beginning_of_previous_big_word());
+            return;
+        }
+        if self.vim_normal_keymap.move_big_word_end.is_pressed(event) {
+            self.set_cursor(self.vim_big_word_end_cursor());
+            return;
+        }
         if self.vim_normal_keymap.move_line_start.is_pressed(event) {
             self.set_cursor(self.beginning_of_current_line());
             return;
@@ -2136,6 +2156,86 @@ impl TextArea {
         self.adjust_pos_out_of_elements(end + next_non_ws, /*prefer_start*/ true)
     }
 
+    /// Start of the next WORD, which is any run of non-whitespace characters.
+    ///
+    /// Unlike `w`, `W` ignores word separators such as `.` and `-`, so
+    /// `foo.bar/baz` is a single WORD.
+    fn beginning_of_next_big_word(&self) -> usize {
+        let Some(first_non_ws) = self.text[self.cursor_pos..].find(|c: char| !c.is_whitespace())
+        else {
+            return self.text.len();
+        };
+        let word_start = self.cursor_pos + first_non_ws;
+        if word_start != self.cursor_pos {
+            return self.adjust_pos_out_of_elements(word_start, /*prefer_start*/ true);
+        }
+        let end = self.end_of_big_word_from(word_start);
+        if end >= self.text.len() {
+            return self.text.len();
+        }
+        let Some(next_non_ws) = self.text[end..].find(|c: char| !c.is_whitespace()) else {
+            return self.text.len();
+        };
+        self.adjust_pos_out_of_elements(end + next_non_ws, /*prefer_start*/ true)
+    }
+
+    /// Start of the previous WORD, mirroring `W` on the text before the cursor.
+    fn beginning_of_previous_big_word(&self) -> usize {
+        let prefix = &self.text[..self.cursor_pos];
+        let Some((last_non_ws_idx, _)) = prefix
+            .char_indices()
+            .rev()
+            .find(|&(_, ch)| !ch.is_whitespace())
+        else {
+            return 0;
+        };
+        let run_start = prefix[..last_non_ws_idx]
+            .char_indices()
+            .rev()
+            .find(|&(_, ch)| ch.is_whitespace())
+            .map_or(0, |(idx, ch)| idx + ch.len_utf8());
+
+        self.adjust_pos_out_of_elements(run_start, /*prefer_start*/ true)
+    }
+
+    /// Exclusive end of the WORD at or after `cursor_pos`, skipping leading whitespace.
+    fn end_of_big_word_from(&self, cursor_pos: usize) -> usize {
+        let suffix = &self.text[cursor_pos..];
+        let Some(first_non_ws) = suffix.find(|ch: char| !ch.is_whitespace()) else {
+            return self.text.len();
+        };
+        let run = &suffix[first_non_ws..];
+        let run_end = run.find(char::is_whitespace).unwrap_or(run.len());
+
+        self.adjust_pos_out_of_elements(
+            cursor_pos + first_non_ws + run_end,
+            /*prefer_start*/ false,
+        )
+    }
+
+    fn vim_big_word_end_exclusive(&self) -> usize {
+        let end = self.end_of_big_word_from(self.cursor_pos);
+        let target = if end > self.cursor_pos {
+            self.prev_atomic_boundary(end)
+        } else {
+            end
+        };
+        if target == self.cursor_pos && end < self.text.len() {
+            self.end_of_big_word_from(end)
+        } else {
+            end
+        }
+    }
+
+    fn vim_big_word_end_cursor(&self) -> usize {
+        let end = self.vim_big_word_end_exclusive();
+        if end > self.cursor_pos {
+            self.prev_atomic_boundary(end)
+        } else {
+            end
+        }
+    }
+
     fn adjust_pos_out_of_elements(&self, pos: usize, prefer_start: bool) -> usize {
         if let Some(idx) = self.find_element_containing(pos) {
             let e = &self.elements[idx];
@@ -3108,6 +3208,87 @@ mod tests {
         t.input(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
 
         assert_eq!(t.cursor(), "alpha  ".len());
+    }
+
+    #[test]
+    fn vim_big_word_forward_spans_punctuation_runs() {
+        let mut t = ta_with("foo.bar/baz qux");
+        t.set_cursor(/*pos*/ 0);
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE));
+
+        assert_eq!(t.cursor(), "foo.bar/baz ".len());
+
+        t.input(KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE));
+
+        assert_eq!(t.cursor(), t.text().len());
+    }
+
+    #[test]
+    fn vim_lowercase_word_forward_still_splits_on_punctuation() {
+        let mut t = ta_with("foo.bar/baz qux");
+        t.set_cursor(/*pos*/ 0);
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::NONE));
+
+        assert_eq!(t.cursor(), "foo".len());
+    }
+
+    #[test]
+    fn vim_big_word_forward_crosses_line_breaks() {
+        let mut t = ta_with("one two\nthree");
+        t.set_cursor("one two".len());
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('W'), KeyModifiers::NONE));
+
+        assert_eq!(t.cursor(), "one two\n".len());
+    }
+
+    #[test]
+    fn vim_big_word_backward_walks_word_starts() {
+        let mut t = ta_with("one two  three.four");
+        t.set_cursor(t.text().len());
+        t.set_vim_enabled(/*enabled*/ true);
+
+        for expected in ["one two  ".len(), "one ".len(), /*start*/ 0] {
+            t.input(KeyEvent::new(KeyCode::Char('B'), KeyModifiers::NONE));
+
+            assert_eq!(t.cursor(), expected);
+        }
+
+        t.input(KeyEvent::new(KeyCode::Char('B'), KeyModifiers::NONE));
+
+        assert_eq!(t.cursor(), /*pos*/ 0);
+    }
+
+    #[test]
+    fn vim_big_word_end_lands_on_word_end_character() {
+        let mut t = ta_with("foo.bar/baz qux");
+        t.set_cursor(/*pos*/ 0);
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::NONE));
+
+        assert_eq!(t.cursor(), "foo.bar/ba".len());
+
+        t.input(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::NONE));
+
+        assert_eq!(t.cursor(), t.text().len() - 1);
+    }
+
+    #[test]
+    fn vim_uppercase_word_motions_leave_lowercase_bindings_alone() {
+        let mut t = ta_with("alpha beta");
+        t.set_cursor(/*pos*/ 0);
+        t.set_vim_enabled(/*enabled*/ true);
+
+        t.input(KeyEvent::new(KeyCode::Char('E'), KeyModifiers::NONE));
+
+        assert_eq!(t.cursor(), "alph".len()); // codespell:ignore alph
+        assert_eq!(t.text(), "alpha beta");
     }
 
     #[test]

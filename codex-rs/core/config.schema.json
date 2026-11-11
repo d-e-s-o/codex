@@ -5436,6 +5436,9 @@
               "insert_line_start": null,
               "jump_bottom": null,
               "jump_top": null,
+              "move_big_word_backward": null,
+              "move_big_word_end": null,
+              "move_big_word_forward": null,
               "move_down": null,
               "move_left": null,
               "move_line_end": null,
@@ -6651,6 +6654,9 @@
             "insert_line_start": null,
             "jump_bottom": null,
             "jump_top": null,
+            "move_big_word_backward": null,
+            "move_big_word_end": null,
+            "move_big_word_forward": null,
             "move_down": null,
             "move_left": null,
             "move_line_end": null,
@@ -7073,6 +7079,30 @@
             }
           ],
           "description": "Begin a jump to the first buffer line (`gg`)."
+        },
+        "move_big_word_backward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move cursor to start of previous WORD (`B`)."
+        },
+        "move_big_word_end": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move cursor to end of current/next WORD (`E`)."
+        },
+        "move_big_word_forward": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Move cursor to start of next WORD (`W`)."
         },
         "move_down": {
           "allOf": [

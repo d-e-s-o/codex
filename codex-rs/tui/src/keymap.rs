@@ -258,6 +258,9 @@ pub(crate) struct VimNormalKeymap {
     pub(crate) move_word_forward: Vec<KeyBinding>,
     pub(crate) move_word_backward: Vec<KeyBinding>,
     pub(crate) move_word_end: Vec<KeyBinding>,
+    pub(crate) move_big_word_forward: Vec<KeyBinding>,
+    pub(crate) move_big_word_backward: Vec<KeyBinding>,
+    pub(crate) move_big_word_end: Vec<KeyBinding>,
     pub(crate) move_line_start: Vec<KeyBinding>,
     pub(crate) move_line_end: Vec<KeyBinding>,
     pub(crate) find_forward: Vec<KeyBinding>,
@@ -1028,6 +1031,19 @@ impl RuntimeKeymap {
             move_word_forward: resolve_local!(keymap, defaults, vim_normal, move_word_forward),
             move_word_backward: resolve_local!(keymap, defaults, vim_normal, move_word_backward),
             move_word_end: resolve_local!(keymap, defaults, vim_normal, move_word_end),
+            move_big_word_forward: resolve_local!(
+                keymap,
+                defaults,
+                vim_normal,
+                move_big_word_forward
+            ),
+            move_big_word_backward: resolve_local!(
+                keymap,
+                defaults,
+                vim_normal,
+                move_big_word_backward
+            ),
+            move_big_word_end: resolve_local!(keymap, defaults, vim_normal, move_big_word_end),
             move_line_start: resolve_local!(keymap, defaults, vim_normal, move_line_start),
             move_line_end: resolve_local!(keymap, defaults, vim_normal, move_line_end),
             find_forward: resolve_local!(keymap, defaults, vim_normal, find_forward),
@@ -1118,6 +1134,18 @@ impl RuntimeKeymap {
             (
                 keymap.vim_normal.move_word_end.as_ref(),
                 vim_normal.move_word_end.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_big_word_forward.as_ref(),
+                vim_normal.move_big_word_forward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_big_word_backward.as_ref(),
+                vim_normal.move_big_word_backward.as_slice(),
+            ),
+            (
+                keymap.vim_normal.move_big_word_end.as_ref(),
+                vim_normal.move_big_word_end.as_slice(),
             ),
             (
                 keymap.vim_normal.move_line_start.as_ref(),
@@ -1987,6 +2015,18 @@ impl RuntimeKeymap {
                 move_word_forward: default_bindings![plain(KeyCode::Char('w'))],
                 move_word_backward: default_bindings![plain(KeyCode::Char('b'))],
                 move_word_end: default_bindings![plain(KeyCode::Char('e'))],
+                move_big_word_forward: default_bindings![
+                    shift(KeyCode::Char('w')),
+                    plain(KeyCode::Char('W'))
+                ],
+                move_big_word_backward: default_bindings![
+                    shift(KeyCode::Char('b')),
+                    plain(KeyCode::Char('B'))
+                ],
+                move_big_word_end: default_bindings![
+                    shift(KeyCode::Char('e')),
+                    plain(KeyCode::Char('E'))
+                ],
                 move_line_start: default_bindings![plain(KeyCode::Char('0'))],
                 move_line_end: default_bindings![
                     plain(KeyCode::Char('$')),
@@ -3851,6 +3891,70 @@ mod tests {
                 key_hint::plain(KeyCode::Down)
             ]
         );
+    }
+
+    #[test]
+    fn vim_normal_defaults_include_big_word_motions() {
+        let runtime = RuntimeKeymap::defaults();
+
+        assert_eq!(
+            runtime.vim_normal.move_big_word_forward,
+            vec![
+                key_hint::shift(KeyCode::Char('w')),
+                key_hint::plain(KeyCode::Char('W'))
+            ]
+        );
+        assert_eq!(
+            runtime.vim_normal.move_big_word_backward,
+            vec![
+                key_hint::shift(KeyCode::Char('b')),
+                key_hint::plain(KeyCode::Char('B'))
+            ]
+        );
+        assert_eq!(
+            runtime.vim_normal.move_big_word_end,
+            vec![
+                key_hint::shift(KeyCode::Char('e')),
+                key_hint::plain(KeyCode::Char('E'))
+            ]
+        );
+    }
+
+    #[test]
+    fn vim_normal_big_word_bindings_are_configurable() {
+        let mut keymap = TuiKeymap::default();
+        keymap.vim_normal.move_big_word_forward = Some(one("alt-w"));
+        keymap.vim_normal.move_big_word_backward = Some(one("alt-b"));
+        keymap.vim_normal.move_big_word_end = Some(one("alt-e"));
+
+        let runtime = RuntimeKeymap::from_config(&keymap).expect("config should parse");
+
+        assert_eq!(
+            runtime.vim_normal.move_big_word_forward,
+            vec![key_hint::alt(KeyCode::Char('w'))]
+        );
+        assert_eq!(
+            runtime.vim_normal.move_big_word_backward,
+            vec![key_hint::alt(KeyCode::Char('b'))]
+        );
+        assert_eq!(
+            runtime.vim_normal.move_big_word_end,
+            vec![key_hint::alt(KeyCode::Char('e'))]
+        );
+        assert_eq!(
+            runtime.vim_normal.move_word_forward,
+            vec![key_hint::plain(KeyCode::Char('w'))]
+        );
+    }
+
+    #[test]
+    fn explicit_empty_array_unbinds_vim_big_word_action() {
+        let mut keymap = TuiKeymap::default();
+        keymap.vim_normal.move_big_word_forward = Some(KeybindingsSpec::Many(vec![]));
+
+        let runtime = RuntimeKeymap::from_config(&keymap).expect("config should parse");
+
+        assert!(runtime.vim_normal.move_big_word_forward.is_empty());
     }
 
     #[test]

@@ -321,6 +321,12 @@ pub struct TuiVimNormalKeymap {
     pub move_word_backward: Option<KeybindingsSpec>,
     /// Move cursor to end of current/next word (`e`).
     pub move_word_end: Option<KeybindingsSpec>,
+    /// Move cursor to start of next WORD (`W`).
+    pub move_big_word_forward: Option<KeybindingsSpec>,
+    /// Move cursor to start of previous WORD (`B`).
+    pub move_big_word_backward: Option<KeybindingsSpec>,
+    /// Move cursor to end of current/next WORD (`E`).
+    pub move_big_word_end: Option<KeybindingsSpec>,
     /// Move cursor to start of line (`0`).
     pub move_line_start: Option<KeybindingsSpec>,
     /// Move cursor to end of line (`$`).
